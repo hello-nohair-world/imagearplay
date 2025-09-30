@@ -28,9 +28,9 @@ Python 3.8+，提供高效的编程环境和丰富的第三方库支持。
 | Python解释器     | 3.8及以上版本  |
 
 #### 4.4 包管理配置
-&emsp;&emsp;环境变量配置完成后， 在终端运行 pip install pipenv 下载pipenv(如果有pipenv则无需下载) ，然后运行 pipenv install 命令,系统会自动生成一个虚拟环境，一个Pipfile文件以及一个 Pipfile.lock 文件。同时系统会自动下载Pipfile文件中的包，将现有环境更换为虚拟环境后可以直接使用。如果开发时需要使用新的包，则需先将要使用的包添加至Pipfile文件，后使用pip update 命令更新。
+&emsp;&emsp;环境变量配置完成后， 在终端运行 pip install pipenv 下载pipenv(如果有pipenv则无需下载) ，然后运行 pipenv install 命令,系统会自动生成一个虚拟环境，一个Pipfile文件以及一个 Pipfile.lock 文件。同时系统会自动下载Pipfile文件中的包，将现有环境更换为虚拟环境后可以直接使用。如果开发时需要使用新的包，则需先将要使用的包添加至Pipfile文件，后使用pipenv update 命令更新。
 
-pipfile文件说明：
+- pipfile文件说明：
 
 ![image-20250626095835503](./ReadMe_img/2.png)
 
