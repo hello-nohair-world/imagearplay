@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>趣味图像处理与AR交互学习平台</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- 提示消息 -->
+    <div class="flash-messages">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for msg in messages %}
+                    <div class="flash-message">{{ msg }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <!-- 顶部按钮栏 -->
+    <div class="button-bar">
+        <!-- 加载图片 -->
+        <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data" style="display: inline;">
+            <input type="file" name="file" accept="image/*" onchange="document.getElementById('upload-form').submit()">
+        </form>
+
+        <!-- 保存图片 -->
+        <form action="/save" method="post" style="display: inline;">
+            <button type="submit">保存图像</button>
+        </form>
+
+        <!-- 重置图片 -->
+        <form action="/reset" method="post" style="display: inline;">
+            <button type="submit">重置图像</button>
+        </form>
+
+        <!-- 撤销 -->
+        <form action="/undo" method="post" style="display: inline;">
+            <button type="submit">撤回</button>
+        </form>
+
+        <!-- 恢复 -->
+        <form action="/redo" method="post" style="display: inline;">
+            <button type="submit">恢复</button>
+        </form>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="content">
+        <!-- 左侧图片显示 -->
+        <div class="image-display">
+            {% if img_static_path %}
+                <!-- 直接使用后端处理好的路径，无os模块调用 -->
+                <img src="{{ url_for('static', filename=img_static_path) }}" alt="处理后的图片">
+            {% else %}
+                <div>请加载图像</div>
+            {% endif %}
+        </div>
+
+        <!-- 右侧功能标签页 -->
+        <div class="features">
+            <div class="tabs">
+                <!-- 基础滤镜标签 -->
+                <button class="tab-btn active" onclick="switchTab('basic')">基础滤镜</button>
+                <!-- 艺术滤镜标签 -->
+                <button class="tab-btn" onclick="switchTab('artistic')">艺术滤镜</button>
+                <!-- 图像增强标签 -->
+                <button class="tab-btn" onclick="switchTab('enhancement')">图像增强</button>
+                <!-- 背景移除标签 -->
+                <button class="tab-btn" onclick="switchTab('bg-removal')">背景移除</button>
+                <!-- 其他标签可扩展 -->
+
+                <!-- 基础滤镜内容 -->
+                <div id="basic" class="tab-content active">
+                    <form action="/filter/grayscale" method="post">
+                        <button class="filter-btn" type="submit">灰度滤镜</button>
+                    </form>
+                    <form action="/filter/binary" method="post">
+                        <button class="filter-btn" type="submit">二值化滤镜</button>
+                    </form>
+                    <form action="/filter/invert" method="post">
+                        <button class="filter-btn" type="submit">反色滤镜</button>
+                    </form>
+
+                    <!-- 亮度/对比度调整 -->
+                    <div class="slider-group">
+                        <label>亮度：<span id="brightness-value">0</span></label>
+                        <input type="range" id="brightness" name="brightness" min="-100" max="100" value="0" oninput="document.getElementById('brightness-value').innerText = this.value">
+
+                        <label>对比度：<span id="contrast-value">1.0</span></label>
+                        <input type="range" id="contrast" name="contrast" min="0.5" max="3.0" step="0.1" value="1.0" oninput="document.getElementById('contrast-value').innerText = this.value">
+
+                        <form action="/filter/brightness_contrast" method="post">
+                            <input type="hidden" id="brightness-input" name="brightness" value="0">
+                            <input type="hidden" id="contrast-input" name="contrast" value="1.0">
+                            <button class="filter-btn" type="submit" onclick="setBrightnessContrast()">保存调整</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 艺术滤镜内容 -->
+                <div id="artistic" class="tab-content">
+                    <form action="/filter/edge" method="post">
+                        <button class="filter-btn" type="submit">线描滤镜</button>
+                    </form>
+                    <!-- 素描、卡通、油画滤镜可按此扩展 -->
+                    <button class="filter-btn" disabled>素描滤镜（待扩展）</button>
+                    <button class="filter-btn" disabled>卡通滤镜（待扩展）</button>
+                    <button class="filter-btn" disabled>油画滤镜（待扩展）</button>
+                </div>
+
+                <!-- 图像增强内容 -->
+                <div id="enhancement" class="tab-content">
+                    <button class="filter-btn" disabled>高斯模糊（待扩展）</button>
+                    <button class="filter-btn" disabled>中值滤波（待扩展）</button>
+                    <button class="filter-btn" disabled>双边滤波（待扩展）</button>
+                    <button class="filter-btn" disabled>锐化（待扩展）</button>
+                </div>
+
+                <!-- 背景移除内容 -->
+                <div id="bg-removal" class="tab-content">
+                    <button class="filter-btn" disabled>绿幕抠图（待扩展）</button>
+                    <button class="filter-btn" disabled>肤色分割（待扩展）</button>
+                    <button class="filter-btn" disabled>随机背景替换（待扩展）</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 标签页切换
+        function switchTab(tabId) {
+            // 隐藏所有标签内容
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            // 移除所有标签按钮激活状态
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            // 激活目标标签
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // 传递亮度对比度值到表单
+        function setBrightnessContrast() {
+            const brightness = document.getElementById('brightness').value;
+            const contrast = document.getElementById('contrast').value;
+            document.getElementById('brightness-input').value = brightness;
+            document.getElementById('contrast-input').value = contrast;
+        }
+
+        // 自动隐藏提示消息
+        setTimeout(() => {
+            document.querySelectorAll('.flash-message').forEach(el => el.style.display = 'none');
+        }, 3000);
+    </script>
+</body>
+</html>
