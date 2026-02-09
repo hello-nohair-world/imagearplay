@@ -1,11 +1,14 @@
+# app.py
 import os
+import uuid
+import base64
+from flask import Flask, render_template, request, jsonify, send_from_directory
 import cv2
 import numpy as np
 from PIL import Image
-from flask import Flask, render_template, request, redirect, url_for, flash, session
-from werkzeug.utils import secure_filename
+import io
 
-# 导入原有算法模块
+# 导入您提供的各个功能模块类
 from filters.basic_filters import BasicFilters
 from filters.artistic_filters import ArtisticFilters
 from filters.enhancement import ImageEnhancement
@@ -15,18 +18,20 @@ from ar_effects.face_detection import FaceDetection
 from ar_effects.qr_sticker import QRSticker
 from ar_effects.pose_estimation import PoseEstimation
 
-# Flask初始化
 app = Flask(__name__)
-app.secret_key = "image_ar_play_2024"  # Session加密密钥
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['PROCESSED_FOLDER'] = 'static/processed'
-app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'bmp'}
+app.secret_key = 'your_secret_key'  # 用于 session，生产环境应使用更安全的密钥
 
-# 创建必要目录
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(app.config['PROCESSED_FOLDER'], exist_ok=True)
+# --- 文件存储配置 ---
+UPLOAD_FOLDER = 'uploads'
+PROCESSED_FOLDER = 'processed'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['PROCESSED_FOLDER'] = PROCESSED_FOLDER
 
-# 初始化算法模块
+# 确保上传和处理目录存在
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(PROCESSED_FOLDER, exist_ok=True)
+
+# --- 全局实例化处理模块 ---
 basic_filters = BasicFilters()
 artistic_filters = ArtisticFilters()
 enhancement = ImageEnhancement()
@@ -36,200 +41,170 @@ face_detection = FaceDetection()
 qr_sticker = QRSticker()
 pose_estimation = PoseEstimation()
 
-# 工具函数：检查文件格式
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-# 工具函数：保存图像到指定路径
-def save_image(image, path):
-    if isinstance(image, np.ndarray):
-        cv2.imwrite(path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
-    else:
-        image.save(path)
+def opencv_to_base64(image):
+    """将 OpenCV 图像转换为 base64 字符串"""
+    _, buffer = cv2.imencode('.jpg', image)
+    img_str = base64.b64encode(buffer).decode('utf-8')
+    return f"data:image/jpeg;base64,{img_str}"
 
-# 工具函数：初始化历史记录
-def init_history(original_path):
-    session['history'] = [original_path]
-    session['history_index'] = 0
 
-# 工具函数：更新历史记录
-def update_history(new_path):
-    history = session.get('history', [])
-    history_index = session.get('history_index', 0)
-    # 截断redo部分的历史
-    history = history[:history_index + 1]
-    history.append(new_path)
-    # 限制最大历史记录数
-    if len(history) > 20:
-        history = history[-20:]
-    session['history'] = history
-    session['history_index'] = len(history) - 1
+def base64_to_opencv(img_data):
+    """将 base64 字符串转换为 OpenCV 图像"""
+    header, encoded = img_data.split(',', 1)
+    decoded_data = base64.b64decode(encoded)
+    np_data = np.frombuffer(decoded_data, np.uint8)
+    image = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
+    return image
 
-# 工具函数。新增：通用静态资源路径处理函数（解决Windows分隔符问题）
-def get_static_relative_path(absolute_path):
-    # 先获取相对于static的相对路径（可能含\）
-    rel_path = os.path.relpath(absolute_path, 'static')
-    # 将反斜杠\替换为URL标准正斜杠/，适配所有系统
-    return rel_path.replace('\\', '/')
 
-# 首页路由
 @app.route('/')
 def index():
-    img_static_path = None
-    if session.get('history'):
-        current_path = session['history'][session['history_index']]
-        # 调用通用函数，自动处理分隔符，生成URL标准路径
-        img_static_path = get_static_relative_path(current_path)
-    return render_template('index.html', img_static_path=img_static_path)
+    return render_template('index.html')
 
-# 上传图片路由
+
 @app.route('/upload', methods=['POST'])
 def upload_image():
-    if 'file' not in request.files:
-        flash('未选择文件')
-        return redirect(url_for('index'))
-    file = request.files['file']
-    if file.filename == '':
-        flash('未选择文件')
-        return redirect(url_for('index'))
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        upload_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(upload_path)
-        # 初始化历史记录
-        init_history(upload_path)
-        flash('图片加载成功')
-        return redirect(url_for('index'))
-    else:
-        flash('仅支持png/jpg/jpeg/bmp格式')
-        return redirect(url_for('index'))
+    print("Request JSON:", request.get_json())
+    print("Request Files:", request.files)
+    data = request.get_json()
+    if not data or 'file' not in data:
+        return jsonify({'success': False, 'error': 'Invalid input: missing "file" in JSON'}), 400
 
-# 基础滤镜：灰度
-@app.route('/filter/grayscale', methods=['POST'])
-def apply_grayscale():
-    if not session.get('history'):
-        flash('请先加载图片')
-        return redirect(url_for('index'))
-    # 获取当前图片
-    current_path = session['history'][session['history_index']]
-    img = cv2.imread(current_path)
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    # 应用滤镜
-    result = basic_filters.apply_grayscale(img_rgb)  # 复用原有方法
-    # 保存处理后的图片
-    filename = f"processed_{os.path.basename(current_path)}"
-    processed_path = os.path.join(app.config['PROCESSED_FOLDER'], filename)
-    save_image(result, processed_path)
-    # 更新历史记录
-    update_history(processed_path)
-    return redirect(url_for('index'))
+    img_data = data['file']
+    if not img_data.startswith('data:image'):
+        return jsonify({'success': False, 'error': 'Invalid image data format'}), 400
 
-# 基础滤镜：二值化
-@app.route('/filter/binary', methods=['POST'])
-def apply_binary():
-    if not session.get('history'):
-        flash('请先加载图片')
-        return redirect(url_for('index'))
-    current_path = session['history'][session['history_index']]
-    img = cv2.imread(current_path)
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    result = basic_filters.apply_binary(img_rgb)
-    filename = f"binary_{os.path.basename(current_path)}"
-    processed_path = os.path.join(app.config['PROCESSED_FOLDER'], filename)
-    save_image(result, processed_path)
-    update_history(processed_path)
-    return redirect(url_for('index'))
+    try:
+        # 解析 base64 数据
+        header, encoded = img_data.split(',', 1)
+        decoded_data = base64.b64decode(encoded)
+        np_data = np.frombuffer(decoded_data, np.uint8)
+        image = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
+        if image is None:
+            return jsonify({'success': False, 'error': 'Failed to decode image'}), 400
 
-# 基础滤镜：反色
-@app.route('/filter/invert', methods=['POST'])
-def apply_invert():
-    if not session.get('history'):
-        flash('请先加载图片')
-        return redirect(url_for('index'))
-    current_path = session['history'][session['history_index']]
-    img = cv2.imread(current_path)
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    result = basic_filters.apply_invert(img_rgb)
-    filename = f"invert_{os.path.basename(current_path)}"
-    processed_path = os.path.join(app.config['PROCESSED_FOLDER'], filename)
-    save_image(result, processed_path)
-    update_history(processed_path)
-    return redirect(url_for('index'))
+        # 保存原始图像到 uploads/
+        filename = str(uuid.uuid4()) + '.jpg'
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        cv2.imwrite(filepath, image)
 
-# 亮度/对比度调整
-@app.route('/filter/brightness_contrast', methods=['POST'])
-def adjust_brightness_contrast():
-    if not session.get('history'):
-        flash('请先加载图片')
-        return redirect(url_for('index'))
-    brightness = float(request.form.get('brightness', 0))
-    contrast = float(request.form.get('contrast', 1.0))
-    current_path = session['history'][session['history_index']]
-    img = cv2.imread(current_path)
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    result = basic_filters.adjust_brightness_contrast(img_rgb, brightness, contrast)
-    filename = f"bc_{brightness}_{contrast}_{os.path.basename(current_path)}"
-    processed_path = os.path.join(app.config['PROCESSED_FOLDER'], filename)
-    save_image(result, processed_path)
-    update_history(processed_path)
-    return redirect(url_for('index'))
+        # 转为 base64 用于前端显示（可选：也可直接返回 image 变量）
+        _, buffer = cv2.imencode('.jpg', image)
+        img_str = base64.b64encode(buffer).decode('utf-8')
+        original_base64 = f"data:image/jpeg;base64,{img_str}"
 
-# 艺术滤镜：线描（边缘检测）
-@app.route('/filter/edge', methods=['POST'])
-def apply_edge():
-    if not session.get('history'):
-        flash('请先加载图片')
-        return redirect(url_for('index'))
-    current_path = session['history'][session['history_index']]
-    img = cv2.imread(current_path)
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    result = artistic_filters.apply_edge_detection(img_rgb)
-    filename = f"edge_{os.path.basename(current_path)}"
-    processed_path = os.path.join(app.config['PROCESSED_FOLDER'], filename)
-    save_image(result, processed_path)
-    update_history(processed_path)
-    return redirect(url_for('index'))
+        return jsonify({
+            'success': True,
+            'image': original_base64,
+            'filename': filename
+        })
 
-# 撤销操作
-@app.route('/undo', methods=['POST'])
-def undo():
-    history = session.get('history', [])
-    history_index = session.get('history_index', 0)
-    if history_index > 0:
-        session['history_index'] = history_index - 1
-    else:
-        flash('已无撤销记录')
-    return redirect(url_for('index'))
+    except Exception as e:
+        print(f"[Upload Error] {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
-# 恢复操作
-@app.route('/redo', methods=['POST'])
-def redo():
-    history = session.get('history', [])
-    history_index = session.get('history_index', 0)
-    if history_index < len(history) - 1:
-        session['history_index'] = history_index + 1
-    else:
-        flash('已无恢复记录')
-    return redirect(url_for('index'))
 
-# 重置图片
-@app.route('/reset', methods=['POST'])
-def reset():
-    if session.get('history'):
-        init_history(session['history'][0])  # 重置到原始图片
-    return redirect(url_for('index'))
+@app.route('/process', methods=['POST'])
+def process_image():
 
-# 保存图片
-@app.route('/save', methods=['POST'])
-def save_image_route():
-    if not session.get('history'):
-        flash('请先加载图片')
-        return redirect(url_for('index'))
-    current_path = session['history'][session['history_index']]
-    # 返回文件下载响应（简化版，实际可优化下载逻辑）
-    return redirect(url_for('static', filename=os.path.relpath(current_path, 'static')))
+    data = request.json
+    action = data.get('action')
+    img_data = data.get('image')
+    filename = data.get('filename')
 
-# 其他滤镜/功能可按上述模式扩展（如素描、卡通、背景移除等）
+    if not img_data or not action:
+        return jsonify({'success': False, 'error': 'Invalid input data'})
+
+    try:
+        image = base64_to_opencv(img_data)
+
+        processed_image = None
+        if action == 'grayscale':
+            processed_image = basic_filters.grayscale(image)
+            processed_image = cv2.cvtColor(processed_image, cv2.COLOR_GRAY2BGR)
+        elif action == 'binary':
+            result = basic_filters.binary(image)
+            processed_image = cv2.cvtColor(result, cv2.COLOR_GRAY2BGR)
+        elif action == 'invert':
+            processed_image = basic_filters.invert(image)
+        elif action == 'histogram_equalization':
+            processed_image = basic_filters.histogram_equalization(image)
+        elif action == 'edge_detection':
+            processed_image = artistic_filters.edge_detection(image)
+        elif action == 'sketch':
+            processed_image = artistic_filters.sketch_filter(image)
+        elif action == 'cartoon':
+            processed_image = artistic_filters.cartoon_filter(image)
+        elif action == 'oil_painting':
+            processed_image = artistic_filters.oil_painting(image)
+        elif action == 'gaussian_blur':
+            processed_image = enhancement.gaussian_blur(image)
+        elif action == 'median_blur':
+            processed_image = enhancement.median_blur(image)
+        elif action == 'bilateral_filter':
+            processed_image = enhancement.bilateral_filter(image)
+        elif action == 'sharpen':
+            processed_image = enhancement.sharpen(image)
+        elif action == 'unsharp_mask':
+            processed_image = enhancement.unsharp_mask(image)
+        elif action == 'green_screen_removal':
+            processed_image, _ = bg_removal.green_screen_removal(image)
+        elif action == 'skin_segmentation':
+            processed_image, _ = bg_removal.skin_segmentation(image)
+        elif action == 'replace_background':
+            processed_image = bg_removal.replace_background(image)
+        elif action == 'canny_segmentation':
+            processed_image = obj_segmentation.canny_edge_segmentation(image)
+        elif action == 'watershed_segmentation':
+            processed_image = obj_segmentation.watershed_segmentation(image)
+        elif action == 'connected_components':
+            result = obj_segmentation.connected_components(image)
+            if len(result.shape) == 2:
+                processed_image = cv2.cvtColor(result, cv2.COLOR_GRAY2BGR)
+            else:
+                processed_image = result
+        elif action == 'detect_faces':
+            result, faces = face_detection.detect_faces(image)
+            processed_image = result
+        elif action == 'add_virtual_hat':
+            processed_image = face_detection.add_virtual_hat(image)
+        elif action == 'apply_qr_sticker':
+            processed_image = qr_sticker.add_sticker_on_qr(image)
+        elif action == 'estimate_pose':
+            processed_image = pose_estimation.estimate_pose(image)
+        elif action == 'add_nose_ring':
+            processed_image = pose_estimation.add_nose_ring(image)
+        elif action == 'add_sunglasses':
+            processed_image = pose_estimation.add_sunglasses(image)
+        elif action.startswith('adjust_'):
+            # Handle brightness/contrast adjustments
+            brightness = data.get('brightness', 0)
+            contrast = data.get('contrast', 1.0)
+            processed_image = basic_filters.brightness_contrast(image, brightness=brightness, contrast=contrast)
+        else:
+            return jsonify({'success': False, 'error': 'Unknown action'})
+
+        if processed_image is not None:
+            processed_base64 = opencv_to_base64(processed_image)
+            return jsonify({'success': True, 'image': processed_base64})
+        else:
+            return jsonify({'success': False, 'error': 'Processing failed'})
+
+    except Exception as e:
+        print(f"Error processing image: {e}")  # For debugging
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+
+@app.route('/processed/<filename>')
+def processed_file(filename):
+    return send_from_directory(app.config['PROCESSED_FOLDER'], filename)
+
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    app.run(debug=True)
