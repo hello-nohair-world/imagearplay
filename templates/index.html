@@ -7,7 +7,6 @@
 </head>
 <body>
 <div class="app-container">
-    <!-- 顶部按钮栏 -->
     <div class="top-bar">
         <button id="btn-load">加载图像</button>
         <button id="btn-save" disabled>保存图像</button>
@@ -17,9 +16,7 @@
         <button id="btn-save-progress" disabled>保存进度</button>
     </div>
 
-    <!-- 主内容：左图右面板 -->
     <div class="content">
-        <!-- 左侧：图像显示 -->
         <div class="image-panel">
             <div class="image-container">
                 <img id="display-img" src="" alt="图像显示区" style="display:none;">
@@ -27,7 +24,6 @@
             </div>
         </div>
 
-        <!-- 右侧：功能面板 -->
         <div class="panel-right">
             <div class="tabs">
                 <button class="tab-btn active" data-tab="basic">基础滤镜</button>
@@ -38,7 +34,6 @@
                 <button class="tab-btn" data-tab="ar">AR效果</button>
             </div>
 
-            <!-- 标签页内容 -->
             <div class="tab-content" id="tab-basic">
                 <button class="filter-btn" data-action="grayscale">灰度滤镜</button>
                 <button class="filter-btn" data-action="binary">二值化滤镜</button>
@@ -60,13 +55,13 @@
                 </div>
             </div>
 
+            <!-- 其他 tab-content 略（与您原版一致） -->
             <div class="tab-content hide" id="tab-artistic">
                 <button class="filter-btn" data-action="edge_detection">线描滤镜</button>
                 <button class="filter-btn" data-action="sketch">素描滤镜</button>
                 <button class="filter-btn" data-action="cartoon">卡通滤镜</button>
                 <button class="filter-btn" data-action="oil_painting">油画滤镜</button>
             </div>
-
             <div class="tab-content hide" id="tab-enhancement">
                 <button class="filter-btn" data-action="gaussian_blur">高斯模糊</button>
                 <button class="filter-btn" data-action="median_blur">中值滤波</button>
@@ -74,19 +69,16 @@
                 <button class="filter-btn" data-action="sharpen">锐化</button>
                 <button class="filter-btn" data-action="unsharp_mask">USM锐化</button>
             </div>
-
             <div class="tab-content hide" id="tab-bg-removal">
                 <button class="filter-btn" data-action="green_screen_removal">绿幕抠图</button>
                 <button class="filter-btn" data-action="skin_segmentation">肤色分割</button>
                 <button class="filter-btn" data-action="replace_background">背景替换</button>
             </div>
-
             <div class="tab-content hide" id="tab-segmentation">
                 <button class="filter-btn" data-action="canny_segmentation">Canny边缘分割</button>
                 <button class="filter-btn" data-action="watershed_segmentation">分水岭分割</button>
                 <button class="filter-btn" data-action="connected_components">连通域分析</button>
             </div>
-
             <div class="tab-content hide" id="tab-ar">
                 <button class="filter-btn" data-action="detect_faces">人脸检测</button>
                 <button class="filter-btn" data-action="add_virtual_hat">虚拟帽子</button>
@@ -98,7 +90,6 @@
         </div>
     </div>
 </div>
-
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>
