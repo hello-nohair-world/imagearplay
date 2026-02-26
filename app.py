@@ -55,6 +55,7 @@ def opencv_to_base64(image):
     img_str = base64.b64encode(buffer).decode('utf-8')
     return f"data:image/jpeg;base64,{img_str}"
 
+
 def base64_to_opencv(img_data):
     try:
         if not img_data.startswith('data:image/'):
@@ -74,60 +75,105 @@ def base64_to_opencv(img_data):
         raise ValueError(f"Decode failed: {e}")
 
 
-# === 历史管理器（严格复刻 main.py）===
+# === 历史管理器（严格复刻逻辑并修复边界情况）===
 class HistoryManager:
     def __init__(self):
-        self.history = []          # list of np.ndarray (BGR)
-        self.history_index = -1    # 当前指向的位置
-        self.original_image = None # 原始图
+        self.history = []  # list of np.ndarray (BGR)
+        self.history_index = -1  # 当前指向的位置 (-1 表示无效/锁定/空)
+        self.original_image = None  # 原始图
         self.max_history = 20
 
     def add(self, image):
-        """添加图像到历史（复制）"""
+        """
+        规则1：添加历史记录
+        若在历史中间状态执行新操作，需截断该状态之后的所有记录。
+        对图像进行深拷贝并追加到历史列表末尾，同时更新索引指向新记录。
+        """
         if image is None:
             return
-        # 如果不在末尾，截断后续
+
+        # ✅ 修复：如果当前处于 "锁定" 状态 (index == -1) 或者在中间状态
+        # 规则要求：如果在中间状态，截断后续。
+        # 如果 index 是 -1 (刚保存过)，我们应该把当前图像作为新的 "基准" 开始记录吗？
+        # 根据 Tkinter 逻辑和通常的 "保存进度" 含义：
+        # 保存进度后，用户做新操作，这个新操作应该是基于保存点的。
+        # 此时 history 列表里还有旧数据，但 index 是 -1。
+        # 策略：如果 index == -1，我们不清空历史，而是将 index 重置为 len-1 (指向最后一个保存的状态)
+        # 然后执行正常的 "截断+添加" 逻辑。这样新操作就接在保存点后面了。
+
+        if self.history_index == -1:
+            if len(self.history) > 0:
+                # 恢复到最后一个有效状态，作为新操作的起点
+                self.history_index = len(self.history) - 1
+            else:
+                # 极端情况：历史为空，直接添加
+                self.history.append(image.copy())
+                self.history_index = 0
+                return
+
+        # 如果在中间状态 (index < len - 1)，截断后续
         if self.history_index < len(self.history) - 1:
             self.history = self.history[:self.history_index + 1]
+
         # 添加新图像
         self.history.append(image.copy())
         self.history_index += 1
+
         # 限制长度
         if len(self.history) > self.max_history:
             self.history.pop(0)
             self.history_index -= 1
 
     def undo(self):
+        """规则2：撤回操作"""
+        # 条件检查：仅当 self.history_index > 0 时可执行
         if self.history_index <= 0:
             return None
         self.history_index -= 1
         return self.history[self.history_index].copy()
 
     def redo(self):
-        if self.history_index >= len(self.history) - 1:
+        """规则3：恢复操作"""
+        # 条件检查：仅当 self.history_index < len(self.history) - 1 时可执行
+        # 注意：如果 history_index 是 -1，这个条件肯定不满足 (因为 len >= 0, -1 < len-1 可能成立，但逻辑上 -1 是无状态)
+        # 所以必须先检查 index 是否有效 (>=0)
+        if self.history_index < 0 or self.history_index >= len(self.history) - 1:
             return None
         self.history_index += 1
         return self.history[self.history_index].copy()
 
     def save_current(self):
-        """保存当前状态：覆盖 history[history_index]，并锁定（禁用 undo/redo）"""
+        """
+        规则4：保存进度
+        更新历史：将当前图像副本更新到历史列表中 self.history_index 指向的位置。
+        禁用按钮：将索引设为 -1，模拟 "锁定"。
+        """
         if self.history_index >= 0 and self.history_index < len(self.history):
+            # 覆盖当前状态（虽然通常不需要深拷贝覆盖自己，但为了保险）
             self.history[self.history_index] = self.history[self.history_index].copy()
-            # 🔒 关键：锁定状态 → 将索引设为 -1（表示无有效历史位置）
-            self.history_index = -1
+
+        # 🔒 关键：锁定状态 → 将索引设为 -1
+        # 这会导致 can_undo (index > 0) 为 False
+        # 这会导致 can_redo (index < len - 1 AND index >= 0) 为 False
+        self.history_index = -1
 
     def reset_to_original(self, original):
-        """重置：清空历史，仅保留 original，并添加“重置”操作"""
+        """重置：清空历史，仅保留 original"""
         if original is not None:
             self.original_image = original.copy()
             self.history = [original.copy()]
-            self.history_index = 0  # 指向重置后的状态
+            self.history_index = 0
 
     def can_undo(self):
+        # 规则5：self.history_index > 0
         return self.history_index > 0
 
     def can_redo(self):
-        return self.history_index >= 0 and self.history_index < len(self.history) - 1
+        # 规则5：self.history_index < len(self.history) - 1
+        # 隐含条件：history_index 必须 >= 0 才有意义
+        if self.history_index < 0:
+            return False
+        return self.history_index < len(self.history) - 1
 
 
 history_manager = HistoryManager()
@@ -137,6 +183,7 @@ history_manager = HistoryManager()
 @app.route('/')
 def index():
     return render_template('index.html')
+
 
 @app.route('/upload', methods=['POST'])
 def upload_image():
@@ -153,6 +200,7 @@ def upload_image():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
+
 @app.route('/process', methods=['POST'])
 def process_image():
     data = request.get_json()
@@ -165,7 +213,7 @@ def process_image():
         image = base64_to_opencv(img_data)
         result = None
 
-        # --- 处理各种操作（严格按 main.py）---
+        # --- 处理各种操作 ---
         if action == 'grayscale':
             res_gray = basic_filters.grayscale(image)
             result = cv2.cvtColor(res_gray, cv2.COLOR_GRAY2BGR)
@@ -223,46 +271,91 @@ def process_image():
             contrast = data.get('contrast', 1.0)
             result = basic_filters.brightness_contrast(image, brightness=brightness, contrast=contrast)
         else:
-            return jsonify({'success': False, 'error': f'未知操作: {action}'}), 400
+            return jsonify({'success': False, 'error': f'未知操作：{action}'}), 400
 
         if result is not None:
-            # ✅ 严格复刻 main.py：add_to_history
+            # 添加历史记录
             history_manager.add(result)
-            return jsonify({'success': True, 'image': opencv_to_base64(result)})
+
+            return jsonify({
+                'success': True,
+                'image': opencv_to_base64(result),
+                'can_undo': history_manager.can_undo(),
+                'can_redo': history_manager.can_redo()
+            })
         else:
             return jsonify({'success': False, 'error': '处理未返回图像'}), 500
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
 # === 历史 API ===
 @app.route('/history/undo', methods=['POST'])
 def undo():
     img = history_manager.undo()
     if img is None:
-        return jsonify({'success': False, 'error': '无更多可撤回操作'}), 400
-    return jsonify({'success': True, 'image': opencv_to_base64(img)})
+        return jsonify({
+            'success': False,
+            'error': '无更多可撤回操作',
+            'can_undo': history_manager.can_undo(),
+            'can_redo': history_manager.can_redo()
+        }), 400
+
+    return jsonify({
+        'success': True,
+        'image': opencv_to_base64(img),
+        'can_undo': history_manager.can_undo(),
+        'can_redo': history_manager.can_redo()
+    })
+
 
 @app.route('/history/redo', methods=['POST'])
 def redo():
     img = history_manager.redo()
     if img is None:
-        return jsonify({'success': False, 'error': '无更多可恢复操作'}), 400
-    return jsonify({'success': True, 'image': opencv_to_base64(img)})
+        return jsonify({
+            'success': False,
+            'error': '无更多可恢复操作',
+            'can_undo': history_manager.can_undo(),
+            'can_redo': history_manager.can_redo()
+        }), 400
+
+    return jsonify({
+        'success': True,
+        'image': opencv_to_base64(img),
+        'can_undo': history_manager.can_undo(),
+        'can_redo': history_manager.can_redo()
+    })
+
 
 @app.route('/history/save', methods=['POST'])
 def save_progress():
-    # ✅ 严格复刻 main.py：save_current → 锁定状态
     history_manager.save_current()
-    return jsonify({'success': True, 'locked': True})
+
+    return jsonify({
+        'success': True,
+        'locked': True,
+        'can_undo': False,
+        'can_redo': False
+    })
+
 
 @app.route('/history/reset', methods=['POST'])
 def reset_image():
     if history_manager.original_image is not None:
         original = history_manager.original_image.copy()
         history_manager.reset_to_original(original)
-        return jsonify({'success': True, 'image': opencv_to_base64(original)})
+
+        return jsonify({
+            'success': True,
+            'image': opencv_to_base64(original),
+            'can_undo': history_manager.can_undo(),
+            'can_redo': history_manager.can_redo()
+        })
+
     return jsonify({'success': False, 'error': '无原始图像'}), 400
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000)
