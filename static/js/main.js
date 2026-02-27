@@ -346,17 +346,43 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     // ===== 亮度/对比度 =====
-    let timeoutId = null;
-    function debouncedProcess(action, extra) {
-        if (timeoutId) clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => {
-            process(action, extra);
-        }, 300);
+    let previewTimeoutId = null;
+
+    // 预览函数（不保存到历史记录）
+    async function previewAdjust(action, extra) {
+        if (!currentImageBase64 || isProcessing) return;
+        try {
+            const response = await fetch('/process', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action,
+                    image: currentImageBase64,
+                    preview: true,
+                    ...extra
+                })
+            });
+            const data = await response.json();
+            if (data.success) {
+                displayImg.src = data.image;
+                displayImg.style.display = 'block';
+                placeholder.style.display = 'none';
+            }
+        } catch (e) {
+            console.error('预览失败:', e);
+        }
+    }
+
+    function debouncedPreview(action, extra) {
+        if (previewTimeoutId) clearTimeout(previewTimeoutId);
+        previewTimeoutId = setTimeout(() => {
+            previewAdjust(action, extra);
+        }, 150);
     }
 
     brightnessSlider.oninput = function () {
         brightnessVal.textContent = this.value;
-        debouncedProcess('adjust_final', {
+        debouncedPreview('adjust_final', {
             brightness: parseInt(this.value),
             contrast: parseFloat(contrastSlider.value)
         });
@@ -380,7 +406,9 @@ document.addEventListener('DOMContentLoaded', function () {
         contrastSlider.value = 1.0;
         brightnessVal.textContent = 0;
         contrastVal.textContent = "1.0";
-        process('adjust_final', { brightness: 0, contrast: 1.0 });
+        if (currentImageBase64) {
+            displayImg.src = currentImageBase64;
+        }
         showToast('参数已重置');
     };
 

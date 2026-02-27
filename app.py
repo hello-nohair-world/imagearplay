@@ -321,7 +321,21 @@ def process_image():
         elif action == 'adjust_final':
             brightness = data.get('brightness', 0)
             contrast = data.get('contrast', 1.0)
+            preview = data.get('preview', False)
             result = basic_filters.brightness_contrast(image, brightness=brightness, contrast=contrast)
+            if result is not None:
+                # 只有非预览模式才添加到历史记录
+                if not preview:
+                    history_manager.add(result)
+                return jsonify({
+                    'success': True,
+                    'image': opencv_to_base64(result),
+                    'can_undo': history_manager.can_undo(),
+                    'can_redo': history_manager.can_redo()
+                })
+            else:
+                return jsonify({'success': False, 'error': '处理未返回图像'}), 500
+
         else:
             return jsonify({'success': False, 'error': f'未知操作：{action}'}), 400
 
