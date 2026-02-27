@@ -8,7 +8,7 @@ import numpy as np
 from PIL import Image
 import io
 
-# --- 导入您的模块 ---
+# --- 导入功能模块 ---
 try:
     from filters.basic_filters import BasicFilters
     from filters.artistic_filters import ArtisticFilters
@@ -92,14 +92,6 @@ class HistoryManager:
         if image is None:
             return
 
-        # ✅ 修复：如果当前处于 "锁定" 状态 (index == -1) 或者在中间状态
-        # 规则要求：如果在中间状态，截断后续。
-        # 如果 index 是 -1 (刚保存过)，我们应该把当前图像作为新的 "基准" 开始记录吗？
-        # 根据 Tkinter 逻辑和通常的 "保存进度" 含义：
-        # 保存进度后，用户做新操作，这个新操作应该是基于保存点的。
-        # 此时 history 列表里还有旧数据，但 index 是 -1。
-        # 策略：如果 index == -1，我们不清空历史，而是将 index 重置为 len-1 (指向最后一个保存的状态)
-        # 然后执行正常的 "截断+添加" 逻辑。这样新操作就接在保存点后面了。
 
         if self.history_index == -1:
             if len(self.history) > 0:
@@ -149,12 +141,9 @@ class HistoryManager:
         禁用按钮：将索引设为 -1，模拟 "锁定"。
         """
         if self.history_index >= 0 and self.history_index < len(self.history):
-            # 覆盖当前状态（虽然通常不需要深拷贝覆盖自己，但为了保险）
+            # 覆盖当前状态
             self.history[self.history_index] = self.history[self.history_index].copy()
 
-        # 🔒 关键：锁定状态 → 将索引设为 -1
-        # 这会导致 can_undo (index > 0) 为 False
-        # 这会导致 can_redo (index < len - 1 AND index >= 0) 为 False
         self.history_index = -1
 
     def reset_to_original(self, original):
@@ -184,7 +173,7 @@ history_manager = HistoryManager()
 def index():
     return render_template('index.html')
 
-
+# === 上传图像路由 ===
 @app.route('/upload', methods=['POST'])
 def upload_image():
     data = request.get_json()
@@ -200,8 +189,6 @@ def upload_image():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
-
-# 在 app.py 中添加以下路由
 
 # === 保存图像路由 ===
 @app.route('/save', methods=['POST'])
@@ -257,10 +244,6 @@ def get_background_list():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
-
-# === 更新 process_image 路由，添加背景替换变体 ===
-# 在原有的 process_image 函数中添加以下处理分支：
-
 
 
 @app.route('/process', methods=['POST'])

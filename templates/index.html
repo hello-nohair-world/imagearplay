@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>趣味图像处理与 AR 交互学习平台</title>
-    <!-- 引入 Google Fonts -->
+    <!-- 修复：移除多余空格 -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <!-- 引入 FontAwesome 图标 -->
+    <!-- 修复：移除末尾空格 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
@@ -34,12 +34,10 @@
             <!-- 左侧：图像显示 -->
             <div class="image-panel">
                 <div class="image-container" id="image-container">
-                    <!-- 加载动画 -->
                     <div class="loader-overlay" id="loader">
                         <div class="spinner"></div>
                         <p>处理中...</p>
                     </div>
-                    <!-- 背景网格（用于透明图显示） -->
                     <div class="checkerboard"></div>
                     <img id="display-img" src="" alt="图像显示区" style="display:none;">
                     <div id="placeholder" class="placeholder-content">
@@ -69,9 +67,9 @@
                     <div class="tab-content active" id="tab-basic">
                         <div class="grid-buttons">
                             <button class="filter-btn" data-action="grayscale"><i class="fa-solid fa-circle-half-stroke"></i> 灰度</button>
-                            <button class="filter-btn" data-action="binary"><i class="fa-solid fa-circle-half-stroke"></i> 二值化</button>
+                            <button class="filter-btn" data-action="binary"><i class="fa-solid fa-square-check"></i> 二值化</button>
                             <button class="filter-btn" data-action="invert"><i class="fa-solid fa-adjust"></i> 反色</button>
-                            <button class="filter-btn" data-action="histogram_equalization"><i class="fa-solid fa-chart-column"></i> 直方图均衡</button>
+                            <button class="filter-btn" data-action="histogram_equalization"><i class="fa-solid fa-chart-simple"></i> 直方图均衡</button>
                         </div>
                         <div class="section">
                             <h3><i class="fa-solid fa-sun"></i> 亮度/对比度</h3>
@@ -113,18 +111,17 @@
                             <button class="filter-btn" data-action="median_blur"><i class="fa-solid fa-circle-dot"></i> 中值滤波</button>
                             <button class="filter-btn" data-action="bilateral_filter"><i class="fa-solid fa-layer-group"></i> 双边滤波</button>
                             <button class="filter-btn" data-action="sharpen"><i class="fa-solid fa-eye"></i> 锐化</button>
-                            <button class="filter-btn" data-action="unsharp_mask"><i class="fa-solid fa-eye-dropper"></i> USM 锐化</button>
+                            <button class="filter-btn" data-action="unsharp_mask"><i class="fa-solid fa-wand-magic-sparkles"></i> USM 锐化</button>
                         </div>
                     </div>
 
-                    <!-- 背景移除 - 补充完整功能 -->
+                    <!-- 背景移除 -->
                     <div class="tab-content" id="tab-bg-removal">
                         <div class="grid-buttons">
-                            <button class="filter-btn" data-action="green_screen_removal"><i class="fa-solid fa-green"></i> 绿幕抠图</button>
+                            <button class="filter-btn" data-action="green_screen_removal"><i class="fa-solid fa-fill-drip"></i> 绿幕抠图</button>
                             <button class="filter-btn" data-action="skin_segmentation"><i class="fa-solid fa-user"></i> 肤色分割</button>
                         </div>
 
-                        <!-- 背景替换功能区域 -->
                         <div class="section">
                             <h3><i class="fa-solid fa-image"></i> 背景替换</h3>
                             <div class="grid-buttons">
@@ -162,9 +159,9 @@
                     <div class="tab-content" id="tab-ar">
                         <!-- Haar 级联 AR 效果 -->
                         <div class="ar-section">
-                            <h4 class="ar-section-title"><i class="fa-solid fa-face-viewfinder"></i> Haar 级联 AR 效果</h4>
+                            <h4 class="ar-section-title"><i class="fa-solid fa-rectangle-list"></i> Haar 级联 AR 效果</h4>
                             <div class="grid-buttons">
-                                <button class="filter-btn" data-action="detect_faces"><i class="fa-solid fa-rectangle"></i> 人脸检测</button>
+                                <button class="filter-btn" data-action="detect_faces"><i class="fa-solid fa-user"></i> 人脸检测</button>
                                 <button class="filter-btn" data-action="add_virtual_hat"><i class="fa-solid fa-hat-cowboy"></i> 虚拟帽子</button>
                             </div>
                         </div>
@@ -173,7 +170,7 @@
                         <div class="ar-section">
                             <h4 class="ar-section-title"><i class="fa-solid fa-person"></i> MediaPipe AR 效果</h4>
                             <div class="grid-buttons">
-                                <button class="filter-btn" data-action="estimate_pose"><i class="fa-solid fa-person"></i> 姿态估计</button>
+                                <button class="filter-btn" data-action="estimate_pose"><i class="fa-solid fa-vector-square"></i> 姿态估计</button>
                                 <button class="filter-btn" data-action="add_nose_ring"><i class="fa-solid fa-ring"></i> 鼻环装饰</button>
                                 <button class="filter-btn" data-action="add_sunglasses"><i class="fa-solid fa-glasses"></i> 墨镜特效</button>
                             </div>
