@@ -2,7 +2,7 @@
 import os
 import uuid
 import base64
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file, url_for
 import cv2
 import numpy as np
 from PIL import Image
@@ -201,6 +201,68 @@ def upload_image():
         return jsonify({'success': False, 'error': str(e)}), 400
 
 
+# 在 app.py 中添加以下路由
+
+# === 保存图像路由 ===
+@app.route('/save', methods=['POST'])
+def save_image():
+    """保存当前图像"""
+    data = request.get_json()
+    img_data = data.get('image')
+
+    if not img_data:
+        return jsonify({'success': False, 'error': '缺少图像数据'}), 400
+
+    try:
+        image = base64_to_opencv(img_data)
+
+        # 生成文件名
+        filename = f"processed_{uuid.uuid4().hex[:8]}.jpg"
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+
+        # 保存图像
+        cv2.imwrite(filepath, image)
+
+        # 返回下载 URL
+        download_url = url_for('download_file', filename=filename, _external=True)
+
+        return jsonify({
+            'success': True,
+            'download_url': download_url,
+            'filename': filename
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# === 下载文件路由 ===
+@app.route('/download/<filename>')
+def download_file(filename):
+    """下载处理后的图像"""
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    if os.path.exists(filepath):
+        return send_file(filepath, as_attachment=True)
+    return jsonify({'success': False, 'error': '文件不存在'}), 404
+
+
+# === 背景列表路由 ===
+@app.route('/backgrounds/list', methods=['GET'])
+def get_background_list():
+    """获取可用背景列表"""
+    try:
+        backgrounds = bg_removal.get_background_list()
+        return jsonify({
+            'success': True,
+            'backgrounds': backgrounds
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# === 更新 process_image 路由，添加背景替换变体 ===
+# 在原有的 process_image 函数中添加以下处理分支：
+
+
+
 @app.route('/process', methods=['POST'])
 def process_image():
     data = request.get_json()
@@ -266,6 +328,13 @@ def process_image():
             result = pose_estimation.add_nose_ring(image)
         elif action == 'add_sunglasses':
             result = pose_estimation.add_sunglasses(image)
+        elif action == 'replace_background_random':
+            result = bg_removal.replace_background(image, background_index=None)
+        elif action == 'replace_background_default':
+            result = bg_removal.replace_background(image, background_index=-1)
+        elif action == 'replace_background_selected':
+            bg_index = data.get('background_index', 0)
+            result = bg_removal.replace_background(image, background_index=bg_index)
         elif action == 'adjust_final':
             brightness = data.get('brightness', 0)
             contrast = data.get('contrast', 1.0)

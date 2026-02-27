@@ -2,94 +2,199 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>趣味图像处理与AR交互学习平台</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>趣味图像处理与 AR 交互学习平台</title>
+    <!-- 引入 Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- 引入 FontAwesome 图标 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-<div class="app-container">
-    <div class="top-bar">
-        <button id="btn-load">加载图像</button>
-        <button id="btn-save" disabled>保存图像</button>
-        <button id="btn-reset" disabled>重置图像</button>
-        <button id="btn-undo" disabled>撤回</button>
-        <button id="btn-redo" disabled>恢复</button>
-        <button id="btn-save-progress" disabled>保存进度</button>
-    </div>
-
-    <div class="content">
-        <div class="image-panel">
-            <div class="image-container">
-                <img id="display-img" src="" alt="图像显示区" style="display:none;">
-                <p id="placeholder">请加载图像</p>
+    <div class="app-container">
+        <!-- 顶部导航 -->
+        <header class="main-header">
+            <div class="logo">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <h1>趣味图像处理与 AR 交互学习平台</h1>
             </div>
-        </div>
-
-        <div class="panel-right">
-            <div class="tabs">
-                <button class="tab-btn active" data-tab="basic">基础滤镜</button>
-                <button class="tab-btn" data-tab="artistic">艺术滤镜</button>
-                <button class="tab-btn" data-tab="enhancement">图像增强</button>
-                <button class="tab-btn" data-tab="bg-removal">背景移除</button>
-                <button class="tab-btn" data-tab="segmentation">对象分割</button>
-                <button class="tab-btn" data-tab="ar">AR效果</button>
+            <div class="top-actions">
+                <button id="btn-load" class="btn btn-primary"><i class="fa-solid fa-upload"></i> 加载图像</button>
+                <button id="btn-save-image" class="btn btn-secondary" disabled><i class="fa-solid fa-download"></i> 保存图像</button>
+                <button id="btn-save-progress" class="btn btn-secondary" disabled><i class="fa-solid fa-floppy-disk"></i> 保存进度</button>
+                <div class="divider"></div>
+                <button id="btn-undo" class="btn btn-icon" disabled title="撤回"><i class="fa-solid fa-rotate-left"></i></button>
+                <button id="btn-redo" class="btn btn-icon" disabled title="恢复"><i class="fa-solid fa-rotate-right"></i></button>
+                <button id="btn-reset" class="btn btn-danger" disabled><i class="fa-solid fa-trash-can"></i> 重置</button>
             </div>
+        </header>
 
-            <div class="tab-content" id="tab-basic">
-                <button class="filter-btn" data-action="grayscale">灰度滤镜</button>
-                <button class="filter-btn" data-action="binary">二值化滤镜</button>
-                <button class="filter-btn" data-action="invert">反色滤镜</button>
-                <button class="filter-btn" data-action="histogram_equalization">直方图均衡化</button>
-
-                <div class="section">
-                    <h3>亮度/对比度</h3>
-                    <div>
-                        <label>亮度：<span id="brightness-val">0</span></label><br>
-                        <input type="range" id="brightness" min="-100" max="100" value="0">
+        <!-- 主内容区 -->
+        <div class="content-wrapper">
+            <!-- 左侧：图像显示 -->
+            <div class="image-panel">
+                <div class="image-container" id="image-container">
+                    <!-- 加载动画 -->
+                    <div class="loader-overlay" id="loader">
+                        <div class="spinner"></div>
+                        <p>处理中...</p>
                     </div>
-                    <div>
-                        <label>对比度：<span id="contrast-val">1.0</span></label><br>
-                        <input type="range" id="contrast" min="0.5" max="3.0" step="0.1" value="1.0">
+                    <!-- 背景网格（用于透明图显示） -->
+                    <div class="checkerboard"></div>
+                    <img id="display-img" src="" alt="图像显示区" style="display:none;">
+                    <div id="placeholder" class="placeholder-content">
+                        <i class="fa-regular fa-image"></i>
+                        <p>请加载图像开始创作</p>
                     </div>
-                    <button id="btn-save-bc">保存调整</button>
-                    <button id="btn-reset-bc">重置滑块</button>
+                </div>
+                <div class="image-info">
+                    <span id="img-status">就绪</span>
+                    <span id="img-dimensions"></span>
                 </div>
             </div>
 
-            <!-- 其他 tab-content 略（与您原版一致） -->
-            <div class="tab-content hide" id="tab-artistic">
-                <button class="filter-btn" data-action="edge_detection">线描滤镜</button>
-                <button class="filter-btn" data-action="sketch">素描滤镜</button>
-                <button class="filter-btn" data-action="cartoon">卡通滤镜</button>
-                <button class="filter-btn" data-action="oil_painting">油画滤镜</button>
-            </div>
-            <div class="tab-content hide" id="tab-enhancement">
-                <button class="filter-btn" data-action="gaussian_blur">高斯模糊</button>
-                <button class="filter-btn" data-action="median_blur">中值滤波</button>
-                <button class="filter-btn" data-action="bilateral_filter">双边滤波</button>
-                <button class="filter-btn" data-action="sharpen">锐化</button>
-                <button class="filter-btn" data-action="unsharp_mask">USM锐化</button>
-            </div>
-            <div class="tab-content hide" id="tab-bg-removal">
-                <button class="filter-btn" data-action="green_screen_removal">绿幕抠图</button>
-                <button class="filter-btn" data-action="skin_segmentation">肤色分割</button>
-                <button class="filter-btn" data-action="replace_background">背景替换</button>
-            </div>
-            <div class="tab-content hide" id="tab-segmentation">
-                <button class="filter-btn" data-action="canny_segmentation">Canny边缘分割</button>
-                <button class="filter-btn" data-action="watershed_segmentation">分水岭分割</button>
-                <button class="filter-btn" data-action="connected_components">连通域分析</button>
-            </div>
-            <div class="tab-content hide" id="tab-ar">
-                <button class="filter-btn" data-action="detect_faces">人脸检测</button>
-                <button class="filter-btn" data-action="add_virtual_hat">虚拟帽子</button>
-                <button class="filter-btn" data-action="apply_qr_sticker">二维码贴纸</button>
-                <button class="filter-btn" data-action="estimate_pose">姿态估计</button>
-                <button class="filter-btn" data-action="add_nose_ring">鼻环装饰</button>
-                <button class="filter-btn" data-action="add_sunglasses">墨镜特效</button>
+            <!-- 右侧：功能面板 -->
+            <div class="panel-right">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="basic"><i class="fa-solid fa-sliders"></i> 基础</button>
+                    <button class="tab-btn" data-tab="artistic"><i class="fa-solid fa-palette"></i> 艺术</button>
+                    <button class="tab-btn" data-tab="enhancement"><i class="fa-solid fa-wand-magic"></i> 增强</button>
+                    <button class="tab-btn" data-tab="bg-removal"><i class="fa-solid fa-eraser"></i> 抠图</button>
+                    <button class="tab-btn" data-tab="segmentation"><i class="fa-solid fa-scissors"></i> 分割</button>
+                    <button class="tab-btn" data-tab="ar"><i class="fa-solid fa-glasses"></i> AR 特效</button>
+                </div>
+
+                <div class="tab-content-wrapper">
+                    <!-- 基础滤镜 -->
+                    <div class="tab-content active" id="tab-basic">
+                        <div class="grid-buttons">
+                            <button class="filter-btn" data-action="grayscale"><i class="fa-solid fa-circle-half-stroke"></i> 灰度</button>
+                            <button class="filter-btn" data-action="binary"><i class="fa-solid fa-circle-half-stroke"></i> 二值化</button>
+                            <button class="filter-btn" data-action="invert"><i class="fa-solid fa-adjust"></i> 反色</button>
+                            <button class="filter-btn" data-action="histogram_equalization"><i class="fa-solid fa-chart-column"></i> 直方图均衡</button>
+                        </div>
+                        <div class="section">
+                            <h3><i class="fa-solid fa-sun"></i> 亮度/对比度</h3>
+                            <div class="control-group">
+                                <label>亮度</label>
+                                <div class="slider-container">
+                                    <input type="range" id="brightness" min="-100" max="100" value="0">
+                                    <span id="brightness-val">0</span>
+                                </div>
+                            </div>
+                            <div class="control-group">
+                                <label>对比度</label>
+                                <div class="slider-container">
+                                    <input type="range" id="contrast" min="0.5" max="3.0" step="0.1" value="1.0">
+                                    <span id="contrast-val">1.0</span>
+                                </div>
+                            </div>
+                            <div class="btn-group">
+                                <button id="btn-save-bc" class="btn btn-sm btn-primary">应用</button>
+                                <button id="btn-reset-bc" class="btn btn-sm btn-secondary">重置</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 艺术滤镜 -->
+                    <div class="tab-content" id="tab-artistic">
+                        <div class="grid-buttons">
+                            <button class="filter-btn" data-action="edge_detection"><i class="fa-solid fa-pen-nib"></i> 线描</button>
+                            <button class="filter-btn" data-action="sketch"><i class="fa-solid fa-pencil"></i> 素描</button>
+                            <button class="filter-btn" data-action="cartoon"><i class="fa-solid fa-face-smile"></i> 卡通</button>
+                            <button class="filter-btn" data-action="oil_painting"><i class="fa-solid fa-paintbrush"></i> 油画</button>
+                        </div>
+                    </div>
+
+                    <!-- 图像增强 -->
+                    <div class="tab-content" id="tab-enhancement">
+                        <div class="grid-buttons">
+                            <button class="filter-btn" data-action="gaussian_blur"><i class="fa-solid fa-droplet"></i> 高斯模糊</button>
+                            <button class="filter-btn" data-action="median_blur"><i class="fa-solid fa-circle-dot"></i> 中值滤波</button>
+                            <button class="filter-btn" data-action="bilateral_filter"><i class="fa-solid fa-layer-group"></i> 双边滤波</button>
+                            <button class="filter-btn" data-action="sharpen"><i class="fa-solid fa-eye"></i> 锐化</button>
+                            <button class="filter-btn" data-action="unsharp_mask"><i class="fa-solid fa-eye-dropper"></i> USM 锐化</button>
+                        </div>
+                    </div>
+
+                    <!-- 背景移除 - 补充完整功能 -->
+                    <div class="tab-content" id="tab-bg-removal">
+                        <div class="grid-buttons">
+                            <button class="filter-btn" data-action="green_screen_removal"><i class="fa-solid fa-green"></i> 绿幕抠图</button>
+                            <button class="filter-btn" data-action="skin_segmentation"><i class="fa-solid fa-user"></i> 肤色分割</button>
+                        </div>
+
+                        <!-- 背景替换功能区域 -->
+                        <div class="section">
+                            <h3><i class="fa-solid fa-image"></i> 背景替换</h3>
+                            <div class="grid-buttons">
+                                <button class="filter-btn" id="btn-bg-random"><i class="fa-solid fa-dice"></i> 随机背景</button>
+                                <button class="filter-btn" id="btn-bg-default"><i class="fa-solid fa-square"></i> 默认蓝色</button>
+                            </div>
+
+                            <div class="control-group" style="margin-top: 15px;">
+                                <label>选择背景:</label>
+                                <div class="select-container">
+                                    <select id="background-select" class="form-select">
+                                        <option value="">请选择背景</option>
+                                    </select>
+                                    <button id="btn-refresh-bg" class="btn btn-sm btn-icon" title="刷新背景列表">
+                                        <i class="fa-solid fa-rotate-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <button id="btn-bg-selected" class="btn btn-sm btn-primary" style="width: 100%; margin-top: 10px;">
+                                <i class="fa-solid fa-check"></i> 使用选中背景
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 对象分割 -->
+                    <div class="tab-content" id="tab-segmentation">
+                        <div class="grid-buttons">
+                            <button class="filter-btn" data-action="canny_segmentation"><i class="fa-solid fa-border-all"></i> Canny 边缘</button>
+                            <button class="filter-btn" data-action="watershed_segmentation"><i class="fa-solid fa-water"></i> 分水岭</button>
+                            <button class="filter-btn" data-action="connected_components"><i class="fa-solid fa-shapes"></i> 连通域</button>
+                        </div>
+                    </div>
+
+                    <!-- AR 效果 - 添加分类 -->
+                    <div class="tab-content" id="tab-ar">
+                        <!-- Haar 级联 AR 效果 -->
+                        <div class="ar-section">
+                            <h4 class="ar-section-title"><i class="fa-solid fa-face-viewfinder"></i> Haar 级联 AR 效果</h4>
+                            <div class="grid-buttons">
+                                <button class="filter-btn" data-action="detect_faces"><i class="fa-solid fa-rectangle"></i> 人脸检测</button>
+                                <button class="filter-btn" data-action="add_virtual_hat"><i class="fa-solid fa-hat-cowboy"></i> 虚拟帽子</button>
+                            </div>
+                        </div>
+
+                        <!-- MediaPipe AR 效果 -->
+                        <div class="ar-section">
+                            <h4 class="ar-section-title"><i class="fa-solid fa-person"></i> MediaPipe AR 效果</h4>
+                            <div class="grid-buttons">
+                                <button class="filter-btn" data-action="estimate_pose"><i class="fa-solid fa-person"></i> 姿态估计</button>
+                                <button class="filter-btn" data-action="add_nose_ring"><i class="fa-solid fa-ring"></i> 鼻环装饰</button>
+                                <button class="filter-btn" data-action="add_sunglasses"><i class="fa-solid fa-glasses"></i> 墨镜特效</button>
+                            </div>
+                        </div>
+
+                        <!-- 二维码 AR 效果 -->
+                        <div class="ar-section">
+                            <h4 class="ar-section-title"><i class="fa-solid fa-qrcode"></i> 二维码 AR 效果</h4>
+                            <div class="grid-buttons">
+                                <button class="filter-btn" data-action="apply_qr_sticker"><i class="fa-solid fa-qrcode"></i> 二维码贴纸</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
-</div>
-<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    <!-- Toast 通知容器 -->
+    <div id="toast-container"></div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>
