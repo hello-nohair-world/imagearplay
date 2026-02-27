@@ -192,6 +192,27 @@
     <!-- Toast 通知容器 -->
     <div id="toast-container"></div>
 
+    <!-- 日志面板 - 右下角 -->
+    <div id="log-panel" class="log-panel">
+        <div class="log-header">
+            <span><i class="fa-solid fa-terminal"></i> 系统日志</span>
+            <div class="log-actions">
+                <button id="btn-clear-log" class="log-btn" title="清空日志">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+                <button id="btn-minimize-log" class="log-btn" title="最小化">
+                    <i class="fa-solid fa-minus"></i>
+                </button>
+            </div>
+        </div>
+        <div id="log-content" class="log-content">
+            <div class="log-entry info">
+                <span class="log-time">[00:00:00]</span>
+                <span class="log-message">系统就绪，等待操作...</span>
+            </div>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-</body>
+    </body>
 </html>
