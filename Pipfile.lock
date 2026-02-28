@@ -1,0 +1,27 @@
+{
+    "_meta": {
+        "hash": {
+            "sha256": "26de31a63350225ec6e54471dcfdd310f06bb972862368ccc1273d0ee1c29d93"
+        },
+        "pipfile-spec": 6,
+        "requires": {
+            "python_version": "3.11"
+        },
+        "sources": [
+            {
+                "name": "pypi",
+                "url": "https://pypi.tuna.tsinghua.edu.cn/simple",
+                "verify_ssl": true
+            }
+        ]
+    },
+    "default": {
+        "Flask": "3.1.2",
+        "Pillow": "*",
+        "mediapipe": "*",
+        "numpy": "*",
+        "opencv-python": "*",
+        "pyzbar": "*"
+    },
+    "develop": {}
+}

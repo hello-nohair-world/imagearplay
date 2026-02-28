@@ -75,7 +75,7 @@ def base64_to_opencv(img_data):
         raise ValueError(f"Decode failed: {e}")
 
 
-# === 历史管理器（严格复刻逻辑并修复边界情况）===
+# === 历史管理器===
 class HistoryManager:
     def __init__(self):
         self.history = []  # list of np.ndarray (BGR)
@@ -91,7 +91,6 @@ class HistoryManager:
         """
         if image is None:
             return
-
 
         if self.history_index == -1:
             if len(self.history) > 0:
@@ -164,7 +163,7 @@ class HistoryManager:
             return False
         return self.history_index < len(self.history) - 1
 
-
+# 实例化历史管理器
 history_manager = HistoryManager()
 
 
@@ -424,4 +423,4 @@ def reset_image():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    app.run(host='127.0.0.1', port=5000)

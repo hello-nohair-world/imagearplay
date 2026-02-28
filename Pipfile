@@ -9,7 +9,7 @@ numpy = "*"
 Pillow = "*"
 mediapipe = "*"
 pyzbar = "*"
-
+Flask = "3.1.2"
 [dev-packages]
 
 [requires]
