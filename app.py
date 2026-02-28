@@ -78,91 +78,103 @@ def base64_to_opencv(img_data):
 # === 历史管理器===
 class HistoryManager:
     def __init__(self):
-        self.history = []  # list of np.ndarray (BGR)
+        # 存储字典而非单纯的图像，包含前景和掩码元数据
+        self.history = []  # list of {'image': ndarray, 'foreground': ndarray, 'mask': ndarray}
         self.history_index = -1  # 当前指向的位置 (-1 表示无效/锁定/空)
         self.original_image = None  # 原始图
         self.max_history = 20
 
-    def add(self, image):
+    def add(self, image, foreground=None, mask=None):
         """
-        规则1：添加历史记录
-        若在历史中间状态执行新操作，需截断该状态之后的所有记录。
-        对图像进行深拷贝并追加到历史列表末尾，同时更新索引指向新记录。
+        规则 1：添加历史记录，同时保存抠图元数据（前景/掩码）
         """
         if image is None:
             return
+        # 构建历史条目
+        entry = {
+            'image': image.copy(),
+            'foreground': foreground.copy() if foreground is not None else None,
+            'mask': mask.copy() if mask is not None else None
+        }
 
         if self.history_index == -1:
             if len(self.history) > 0:
-                # 恢复到最后一个有效状态，作为新操作的起点
                 self.history_index = len(self.history) - 1
             else:
-                # 极端情况：历史为空，直接添加
-                self.history.append(image.copy())
+                self.history.append(entry)
                 self.history_index = 0
-                return
+            return
 
         # 如果在中间状态 (index < len - 1)，截断后续
         if self.history_index < len(self.history) - 1:
             self.history = self.history[:self.history_index + 1]
 
-        # 添加新图像
-        self.history.append(image.copy())
+        self.history.append(entry)
         self.history_index += 1
 
-        # 限制长度
         if len(self.history) > self.max_history:
             self.history.pop(0)
             self.history_index -= 1
 
     def undo(self):
-        """规则2：撤回操作"""
-        # 条件检查：仅当 self.history_index > 0 时可执行
+        """规则 2：撤回操作"""
         if self.history_index <= 0:
-            return None
+            return None, None, None
         self.history_index -= 1
-        return self.history[self.history_index].copy()
+        entry = self.history[self.history_index]
+        return entry['image'].copy(), entry['foreground'].copy() if entry['foreground'] is not None else None, entry[
+            'mask'].copy() if entry['mask'] is not None else None
 
     def redo(self):
-        """规则3：恢复操作"""
-        # 条件检查：仅当 self.history_index < len(self.history) - 1 时可执行
-        # 注意：如果 history_index 是 -1，这个条件肯定不满足 (因为 len >= 0, -1 < len-1 可能成立，但逻辑上 -1 是无状态)
-        # 所以必须先检查 index 是否有效 (>=0)
+        """规则 3：恢复操作"""
         if self.history_index < 0 or self.history_index >= len(self.history) - 1:
-            return None
+            return None, None, None
         self.history_index += 1
-        return self.history[self.history_index].copy()
+        entry = self.history[self.history_index]
+        return entry['image'].copy(), entry['foreground'].copy() if entry['foreground'] is not None else None, entry[
+            'mask'].copy() if entry['mask'] is not None else None
 
     def save_current(self):
         """
-        规则4：保存进度
-        更新历史：将当前图像副本更新到历史列表中 self.history_index 指向的位置。
-        禁用按钮：将索引设为 -1，模拟 "锁定"。
+        规则 4：保存进度
+        保存后清空保存点之前的历史记录，只保留当前状态作为新起点
+        这样撤回操作不能越过保存点
         """
         if self.history_index >= 0 and self.history_index < len(self.history):
-            # 覆盖当前状态
-            self.history[self.history_index] = self.history[self.history_index].copy()
-
-        self.history_index = -1
+            # 获取当前状态的图像和元数据
+            curr = self.history[self.history_index]
+            # 清空历史，只保留当前状态作为新起点
+            self.history = [{
+                'image': curr['image'].copy(),
+                'foreground': curr['foreground'].copy() if curr['foreground'] is not None else None,
+                'mask': curr['mask'].copy() if curr['mask'] is not None else None
+            }]
+            self.history_index = 0
 
     def reset_to_original(self, original):
         """重置：清空历史，仅保留 original"""
         if original is not None:
             self.original_image = original.copy()
-            self.history = [original.copy()]
+            self.history = [{
+                'image': original.copy(),
+                'foreground': None,
+                'mask': None
+            }]
             self.history_index = 0
 
+    def get_current_meta(self):
+        """获取当前历史状态的元数据（前景/掩码）"""
+        if 0 <= self.history_index < len(self.history):
+            return self.history[self.history_index]
+        return None
+
     def can_undo(self):
-        # 规则5：self.history_index > 0
         return self.history_index > 0
 
     def can_redo(self):
-        # 规则5：self.history_index < len(self.history) - 1
-        # 隐含条件：history_index 必须 >= 0 才有意义
         if self.history_index < 0:
             return False
         return self.history_index < len(self.history) - 1
-
 # 实例化历史管理器
 history_manager = HistoryManager()
 
@@ -252,96 +264,123 @@ def process_image():
     img_data = data.get('image')
     if not img_data or not action:
         return jsonify({'success': False, 'error': 'Missing image or action'}), 400
-
     try:
         image = base64_to_opencv(img_data)
         result = None
+        # 获取当前历史状态的元数据（包含可能缓存的前景和掩码）
+        current_state = history_manager.get_current_meta()
+        cached_fg = current_state['foreground'] if current_state else None
+        cached_mask = current_state['mask'] if current_state else None
 
         # --- 处理各种操作 ---
         if action == 'grayscale':
             res_gray = basic_filters.grayscale(image)
             result = cv2.cvtColor(res_gray, cv2.COLOR_GRAY2BGR)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'binary':
             res_gray = basic_filters.binary(image)
             result = cv2.cvtColor(res_gray, cv2.COLOR_GRAY2BGR)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'invert':
             result = basic_filters.invert(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'histogram_equalization':
             result = basic_filters.histogram_equalization(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'edge_detection':
             result = artistic_filters.edge_detection(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'sketch':
             result = artistic_filters.sketch_filter(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'cartoon':
             result = artistic_filters.cartoon_filter(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'oil_painting':
             result = artistic_filters.oil_painting(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'gaussian_blur':
             result = enhancement.gaussian_blur(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'median_blur':
             result = enhancement.median_blur(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'bilateral_filter':
             result = enhancement.bilateral_filter(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'sharpen':
             result = enhancement.sharpen(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'unsharp_mask':
             result = enhancement.unsharp_mask(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'green_screen_removal':
-            result, _ = bg_removal.green_screen_removal(image)
+            fg, mask = bg_removal.green_screen_removal(image)
+            result = fg
+            history_manager.add(result, foreground=fg, mask=mask)
         elif action == 'skin_segmentation':
-            result, _ = bg_removal.skin_segmentation(image)
-        elif action == 'replace_background':
-            result = bg_removal.replace_background(image)
+            result, mask = bg_removal.skin_segmentation(image)
+            history_manager.add(result, foreground=None, mask=None)
+        elif action in ['replace_background', 'replace_background_random', 'replace_background_default',
+                        'replace_background_selected']:
+            # 背景替换：优先使用缓存的 fg/mask
+            bg_index = None
+            if action == 'replace_background_selected':
+                bg_index = data.get('background_index', 0)
+            elif action == 'replace_background_default':
+                bg_index = -1
+
+            # 确定使用的前景和掩码
+            use_fg, use_mask = cached_fg, cached_mask
+            if use_fg is None:
+                # 如果没有缓存，重新抠图
+                use_fg, use_mask = bg_removal.green_screen_removal(image)
+
+            # 调用修改后的 replace_background，传入缓存数据
+            result = bg_removal.replace_background(
+                image=image,
+                foreground=use_fg,
+                mask=use_mask,
+                background_index=bg_index
+            )
+            # 将使用的 fg/mask 继续传递到新的历史记录中
+            history_manager.add(result, foreground=use_fg, mask=use_mask)
         elif action == 'canny_segmentation':
             result = obj_segmentation.canny_edge_segmentation(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'watershed_segmentation':
             result = obj_segmentation.watershed_segmentation(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'connected_components':
             result = obj_segmentation.connected_components(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'detect_faces':
             result, _ = face_detection.detect_faces(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'add_virtual_hat':
             result = face_detection.add_virtual_hat(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'apply_qr_sticker':
             result = qr_sticker.add_sticker_on_qr(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'estimate_pose':
             result = pose_estimation.estimate_pose(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'add_nose_ring':
             result = pose_estimation.add_nose_ring(image)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'add_sunglasses':
             result = pose_estimation.add_sunglasses(image)
-        elif action == 'replace_background_random':
-            result = bg_removal.replace_background(image, background_index=None)
-        elif action == 'replace_background_default':
-            result = bg_removal.replace_background(image, background_index=-1)
-        elif action == 'replace_background_selected':
-            bg_index = data.get('background_index', 0)
-            result = bg_removal.replace_background(image, background_index=bg_index)
+            history_manager.add(result, foreground=None, mask=None)
         elif action == 'adjust_final':
             brightness = data.get('brightness', 0)
             contrast = data.get('contrast', 1.0)
             preview = data.get('preview', False)
             result = basic_filters.brightness_contrast(image, brightness=brightness, contrast=contrast)
-            if result is not None:
-                # 只有非预览模式才添加到历史记录
-                if not preview:
-                    history_manager.add(result)
-                return jsonify({
-                    'success': True,
-                    'image': opencv_to_base64(result),
-                    'can_undo': history_manager.can_undo(),
-                    'can_redo': history_manager.can_redo()
-                })
-            else:
-                return jsonify({'success': False, 'error': '处理未返回图像'}), 500
-
-        else:
-            return jsonify({'success': False, 'error': f'未知操作：{action}'}), 400
+            if not preview:
+                history_manager.add(result, foreground=cached_fg, mask=cached_mask)
 
         if result is not None:
-            # 添加历史记录
-            history_manager.add(result)
-
             return jsonify({
                 'success': True,
                 'image': opencv_to_base64(result),
@@ -350,7 +389,6 @@ def process_image():
             })
         else:
             return jsonify({'success': False, 'error': '处理未返回图像'}), 500
-
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -358,7 +396,7 @@ def process_image():
 # === 历史 API ===
 @app.route('/history/undo', methods=['POST'])
 def undo():
-    img = history_manager.undo()
+    img, fg, mask = history_manager.undo()
     if img is None:
         return jsonify({
             'success': False,
@@ -377,7 +415,7 @@ def undo():
 
 @app.route('/history/redo', methods=['POST'])
 def redo():
-    img = history_manager.redo()
+    img, fg, mask = history_manager.redo()
     if img is None:
         return jsonify({
             'success': False,

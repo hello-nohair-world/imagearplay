@@ -87,17 +87,27 @@ class BackgroundRemoval:
             return [os.path.basename(f) for f in self.background_files]
         return []
 
-    def replace_background(self, image, background_path=None, background_index=None):
+    def replace_background(self, image=None, background_path=None, background_index=None, foreground=None, mask=None):
         """背景替换"""
-        # 进行绿幕抠图
-        foreground, mask = self.green_screen_removal(image)
+        # 1. 获取前景和掩码
+        if foreground is not None and mask is not None:
+            # 如果传入了缓存的前景和掩码，直接使用
+            pass
+        else:
+            # 否则，从原图进行绿幕抠图
+            if image is None:
+                raise ValueError("Image must be provided if foreground/mask are not.")
+            foreground, mask = self.green_screen_removal(image)
 
-        # 选择背景
+        # 2. 选择背景
         background = None
-
         # 如果指定了背景索引
         if background_index is not None:
-            background = self.get_specific_background(background_index)
+            if background_index == -1:
+                # 默认蓝色背景
+                background = np.full_like(foreground, [255, 0, 0], dtype=np.uint8)
+            else:
+                background = self.get_specific_background(background_index)
         # 如果指定了背景路径
         elif background_path is not None and os.path.exists(background_path):
             background = cv2.imread(background_path)
@@ -107,13 +117,17 @@ class BackgroundRemoval:
 
         # 如果没有可用背景，创建默认蓝色背景
         if background is None:
-            background = np.full_like(image, [255, 0, 0], dtype=np.uint8)
+            background = np.full_like(foreground, [255, 0, 0], dtype=np.uint8)
         else:
             # 调整背景大小以匹配前景
-            background = cv2.resize(background, (image.shape[1], image.shape[0]))
+            background = cv2.resize(background, (foreground.shape[1], foreground.shape[0]))
 
-        # 使用掩码合并前景和背景
-        mask_3channel = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        # 3. 使用掩码合并前景和背景
+        # 注意：mask 通常是单通道灰度图，需要转为 3 通道以便 np.where 使用
+        if len(mask.shape) == 2:
+            mask_3channel = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        else:
+            mask_3channel = mask
+
         result = np.where(mask_3channel == 255, foreground, background)
-
         return result
